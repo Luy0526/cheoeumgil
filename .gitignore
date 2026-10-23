@@ -1,0 +1,12 @@
+.gradle/
+build/
+app/build/
+local.properties
+
+# signing secrets (keep in ~/keys, never commit)
+*.jks
+*.keystore
+*signing.properties
+# hotspot server local data
+server/data/
+data/
