@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 처음길: a road ahead with the branch to take highlighted. Content stays inside the 66dp safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#D6E2EE" android:pathData="M36,86 L49,36 L57,36 L70,86 Z" />
+    <path android:fillColor="#16324F" android:pathData="M52.2,76h1.6v8h-1.6z M52.6,61h1.2v7h-1.2z M52.9,48h0.8v5h-0.8z" />
+    <path android:strokeColor="#7FD4FF" android:strokeWidth="6" android:strokeLineCap="round"
+        android:pathData="M55,50 Q60,34 74,30" />
+    <path android:fillColor="#7FD4FF" android:pathData="M83,27.5 L71,22.5 L73.5,36 Z" />
+</vector>

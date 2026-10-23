@@ -32,6 +32,8 @@ import ai.pleos.playground.vehicle.listener.TurnSignalStateListener
 import android.app.Activity
 import com.cheoeumgil.core.BriefingEngine
 import com.cheoeumgil.core.Caution
+import com.cheoeumgil.core.Glyph
+import com.cheoeumgil.core.Icon
 import com.cheoeumgil.core.Hotspot
 import com.cheoeumgil.core.RouteHistory
 import com.cheoeumgil.core.Spot
@@ -43,6 +45,7 @@ import com.cheoeumgil.core.VoiceQuery
 import com.cheoeumgil.core.Wire
 import com.cheoeumgil.core.hotspots
 import com.cheoeumgil.core.hotspotsAhead
+import com.cheoeumgil.core.iconFor
 import android.content.pm.ApplicationInfo
 import android.content.res.Configuration
 import android.graphics.Color
@@ -73,6 +76,7 @@ class MainActivity : Activity() {
     private lateinit var distanceView: TextView
     private lateinit var titleView: TextView
     private lateinit var tipView: TextView
+    private lateinit var iconView: ManeuverIconView
     private lateinit var upcomingView: TextView
     private lateinit var logView: TextView
     private var shown = IDLE
@@ -309,18 +313,31 @@ class MainActivity : Activity() {
         captionView = label(22f, "#FFE08A").apply { setPadding(0, 24, 0, 0) }
         logView = label(14f, "#8A9BAD").apply { setPadding(32, 16, 32, 32); text = lines.joinToString("\n") }
 
+        val dp = resources.displayMetrics.density
+        iconView = ManeuverIconView(this)
+        val texts = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(distanceView); addView(titleView); addView(tipView)
+        }
+        // pictogram left of the text: the maneuver reads at a glance, the words confirm it
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            addView(iconView, LinearLayout.LayoutParams((120 * dp).toInt(), (120 * dp).toInt()).apply { marginEnd = (24 * dp).toInt() })
+            addView(texts, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        }
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(48, 48, 48, 48)
             setBackgroundColor(Color.parseColor("#16324F"))
             headerView = label(20f, "#9FB3C8")
             addView(headerView)
-            addView(distanceView); addView(titleView); addView(tipView)
+            addView(row)
             // in-car touch target: at least 72dp tall
             addView(Button(context).apply {
                 text = "물어보기"
                 textSize = 26f
-                minimumHeight = (72 * resources.displayMetrics.density).toInt()
+                minimumHeight = (72 * dp).toInt()
                 setOnClickListener { listen() }
             }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 32 })
             if (debug) addView(captionView)
@@ -328,7 +345,7 @@ class MainActivity : Activity() {
         val main = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             addView(card)
-            if (landscape) addView(upcomingView)
+            addView(upcomingView)
         }
         val devTools = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -354,6 +371,7 @@ class MainActivity : Activity() {
         distanceView.visibility = if (shown.distance.isEmpty()) TextView.GONE else TextView.VISIBLE
         titleView.text = shown.title
         tipView.text = shown.tip
+        iconView.icon = shown.icon
         upcomingView.text = if (upcoming.isEmpty()) "이어지는 어려운 구간이 없어요." else "이어지는 구간\n" + upcoming.joinToString("\n")
     }
 
@@ -362,7 +380,7 @@ class MainActivity : Activity() {
         lastTurns = turns
         shown = engine.nextHard(turns)?.let { s ->
             val tip = BriefingEngine.action((s.next ?: s.turn).type).second
-            Shown("${BriefingEngine.distance(s.aheadM)} 앞", s.title, tip)
+            Shown("${BriefingEngine.distance(s.aheadM)} 앞", s.title, tip, iconFor(s))
         } ?: Shown("", "1.5킬로미터 안에 어려운 구간이 없어요", "편하게 내비를 따라가세요.")
         upcoming = engine.hardSections(turns, 5_000.0).drop(1)
             .map { "${BriefingEngine.distance(it.aheadM)} · ${it.title}" }
@@ -589,7 +607,7 @@ class MainActivity : Activity() {
                 driven += 16.5
                 val ahead = hotspotsAhead(north(driven), 0.0, demoSpots)
                 shown = ahead.firstOrNull()?.let { (h, d) ->
-                    Shown("${BriefingEngine.distance(d)} 앞", "헤맴 구간", "다른 운전자 ${h.trips}명이 ${h.main.reason} 곳이에요. 미리 차로와 속도를 준비하세요.")
+                    Shown("${BriefingEngine.distance(d)} 앞", "헤맴 구간", "다른 운전자 ${h.trips}명이 ${h.main.reason} 곳이에요. 미리 차로와 속도를 준비하세요.", Icon(Glyph.WARNING, false))
                 } ?: Shown("", "헤맴 지도 데모 주행 중", "")
                 render()
                 demoEngine.onHotspots(ahead).forEach(::say)
@@ -610,6 +628,6 @@ class MainActivity : Activity() {
 }
 
 /** What the card shows: distance ahead (may be empty), what it is, what to do. */
-private data class Shown(val distance: String, val title: String, val tip: String)
+private data class Shown(val distance: String, val title: String, val tip: String, val icon: Icon? = null)
 
 private val IDLE = Shown("", "경로를 설정하면", "어려운 구간을 1.5킬로미터 전에 미리 알려드릴게요.")
