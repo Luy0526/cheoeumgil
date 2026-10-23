@@ -53,4 +53,8 @@
 
 ## APK
 
-제출용 release APK는 `apk/팀명_앱이름_release.apk`에 둘 예정이다 (서명 키를 정한 뒤 생성).
+제출용 release APK: [`apk/이의용_처음길_release.apk`](apk/이의용_처음길_release.apk)
+
+- APK Signature Scheme v3로 서명 (Pleos 요구사항: 서명 키 교체·lineage 지원, minSdk 28)
+- Pleos Connect Emulator 2.1.0에 설치해 실행 확인 (차량 신호, NaviHelper, TTS, STT 초기화 정상)
+- 직접 빌드: 서명 정보를 `~/keys/cheoeumgil-signing.properties`(`storeFile`, `keyAlias`, `storePassword`, `keyPassword`)에 두고 `./gradlew :app:assembleRelease`. 이 파일이 없으면 서명하지 않은 APK가 만들어진다.
