@@ -34,6 +34,8 @@
 ## 실행 방법
 
 1. Pleos Connect Emulator v2.1.0 (API 34) AVD를 Cold boot로 실행한다.
+   - 내비가 "서비스 연결 중"에서 멈추면 에뮬레이터의 DNS 문제다(IPv6 위주 네트워크의 Mac에서 발생). DNS 서버를 지정해 다시 켠다:
+     `emulator -avd Pleos_Connect -no-snapshot -dns-server 8.8.8.8,1.1.1.1`
 2. `./gradlew installDebug`
 3. 런처에서 `처음길`을 실행하고, 내비에서 목적지를 설정하거나 `데모 주행`을 누른다.
 4. 로그: `adb logcat -s Cheoeumgil`
