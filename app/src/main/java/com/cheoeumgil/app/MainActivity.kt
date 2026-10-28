@@ -36,6 +36,7 @@ import com.cheoeumgil.core.Glyph
 import com.cheoeumgil.core.Icon
 import com.cheoeumgil.core.Hotspot
 import com.cheoeumgil.core.RouteHistory
+import com.cheoeumgil.core.SpeechQueue
 import com.cheoeumgil.core.Spot
 import com.cheoeumgil.core.StruggleDetector
 import com.cheoeumgil.core.StruggleEvent
@@ -100,10 +101,11 @@ class MainActivity : Activity() {
     private var lastHere: Spot? = null
     private var uploading = false // route-end signals arrive in pairs; one upload at a time
     private var lastHeading = 0.0
+    private var stopped = true
+    private var startPending = false // route started before the first location fix
     private val ui = Handler(Looper.getMainLooper())
     private val lines = ArrayDeque<String>()
     private val clock = SimpleDateFormat("HH:mm:ss", Locale.KOREA)
-    private var ttsReady = false
     private var lastSpeedLimit = -1
     private lateinit var stt: SpeechToText
     private var sttReady = false
@@ -122,8 +124,7 @@ class MainActivity : Activity() {
         override fun onReady() {}
         override fun onUpdatedRms(rms: Double) {}
     }
-    private var speaking = false
-    private var waiting: String? = null // newest phrase waiting for the current one to finish
+    private val speech = SpeechQueue()
 
     private val ttsEvents = object : EventListener {
         override fun onStart() = log("TTS", "speaking")
@@ -212,8 +213,8 @@ class MainActivity : Activity() {
             override fun onSuccess() {
                 tts.addEventListener(ttsEvents)
                 tts.setLocale(Locale.KOREA)
-                ttsReady = true
                 log("TTS", "ready (Pleos on-device)")
+                ui.post(::speakFinished) // speaks whatever queued up during start-up
             }
             override fun onFailure(error: ErrorType) = log("TTS", "init failed: $error")
         })
@@ -373,6 +374,9 @@ class MainActivity : Activity() {
         tipView.text = shown.tip
         iconView.icon = shown.icon
         upcomingView.text = if (upcoming.isEmpty()) "이어지는 어려운 구간이 없어요." else "이어지는 구간\n" + upcoming.joinToString("\n")
+        val detail = if (stopped) TextView.VISIBLE else TextView.GONE
+        tipView.visibility = detail
+        upcomingView.visibility = detail
     }
 
     private fun onTurns(turns: List<Turn>) {
@@ -385,6 +389,7 @@ class MainActivity : Activity() {
         upcoming = engine.hardSections(turns, 5_000.0).drop(1)
             .map { "${BriefingEngine.distance(it.aheadM)} · ${it.title}" }
         render()
+        engine.summary(turns)?.let(::say)
         engine.onTurns(turns).forEach(::say)
     }
 
@@ -393,7 +398,7 @@ class MainActivity : Activity() {
         destination = name
         detector.tripId = "trip-${now()}"
         engine = BriefingEngine().apply { quiet = history.isFamiliar(name) }
-        lastHere?.let { remember(it); fetchHotspots(it) }
+        lastHere?.let { remember(it); fetchHotspots(it) } ?: run { startPending = true }
         log("NAVI", "destination=$name familiar=${engine.quiet}")
         render()
         if (engine.quiet) say("자주 가던 길이라 꼭 필요한 안내만 드릴게요.")
@@ -414,9 +419,11 @@ class MainActivity : Activity() {
         runCatching { privateFile.appendText("${spot.lat},${spot.lon}\n") }
     }
 
-    private fun privateSpots(): List<Spot> = runCatching {
-        privateFile.readLines().mapNotNull { l -> l.split(",").takeIf { it.size == 2 }?.let { Spot(it[0].toDouble(), it[1].toDouble()) } }
-    }.getOrDefault(emptyList())
+    /** Null when the file can't be read: the caller must then hold the upload (fail closed). */
+    private fun privateSpots(): List<Spot>? = runCatching {
+        if (!privateFile.exists()) emptyList()
+        else privateFile.readLines().mapNotNull { l -> l.split(",").takeIf { it.size == 2 }?.let { Spot(it[0].toDouble(), it[1].toDouble()) } }
+    }.getOrNull()
 
     /** Server hotspots for this area; on failure keep using the on-device aggregation. */
     private fun fetchHotspots(here: Spot) {
@@ -434,14 +441,17 @@ class MainActivity : Activity() {
     /**
      * Sends events newer than the last handled one, minus those near private spots. A timestamp mark
      * (not a list position) stays correct even if the local store is reset or trimmed.
+     * Only route trips (start recorded) go out; free drives without a destination stay in the car.
      */
     private fun uploadPending() {
         if (!server.enabled || uploading) return
         val mark = runCatching { uploadMarkFile.readText().trim().toLong() }.getOrDefault(0L)
         val pending = events.filter { it.timeMs > mark }
         if (pending.isEmpty()) return
+        val spots = privateSpots()
+        if (spots.isNullOrEmpty()) return log("SERVER", "start/destination unknown, upload held")
         val newMark = pending.maxOf { it.timeMs }
-        val batch = Wire.uploadable(pending, privateSpots())
+        val batch = Wire.uploadable(pending.filter { it.tripId.startsWith("trip-") }, spots)
         uploading = true
         Thread {
             val ok = batch.isEmpty() || server.upload(batch)
@@ -503,7 +513,14 @@ class MainActivity : Activity() {
     private fun onLocation(here: Spot, headingDeg: Double) {
         lastHere = here
         lastHeading = headingDeg
+        if (startPending) {
+            startPending = false
+            remember(here)
+            fetchHotspots(here)
+        }
         record(detector.onLocation(here, now()))
+        val s = detector.speedKmh < STOPPED_KMH
+        if (s != stopped) { stopped = s; render() }
         checkHotspots()
     }
 
@@ -535,29 +552,22 @@ class MainActivity : Activity() {
         log("STRUGGLE", "loaded ${events.size} events, ${hotspotList.size} hotspots")
     }
 
-    // ponytail: one waiting slot, newest wins; a priority queue only if briefings start getting dropped
     private fun say(text: String, briefing: Boolean = true) {
         log("SAY", text)
         captionView.text = (question?.let { "🎤 \"$it\"\n" } ?: "") + "🔊 $text"
         question = null
         if (briefing) lastBriefing = text
-        if (!ttsReady) return
-        if (speaking) waiting = text else speakNow(text)
-    }
-
-    private fun speakNow(text: String) {
-        speaking = true
-        tts.speak(text)
+        speech.offer(text)?.let(tts::speak)
     }
 
     private fun speakFinished() {
-        speaking = false
-        waiting?.let { waiting = null; speakNow(it) }
+        speech.done()?.let(tts::speak)
     }
 
     /** Replays the TBT list recorded from the emulator's 판교테크노밸리 route, ~60 km/h at 2x speed. */
     private fun startDemo() {
         ui.removeCallbacksAndMessages(null)
+        engine = BriefingEngine()
         var route = listOf(
             Turn("TURN_LEFT", 80.0, "기업지원허브 방면"),
             Turn("TURN_RIGHT", 380.0, "판교IC 방면"),
@@ -607,7 +617,7 @@ class MainActivity : Activity() {
                 driven += 16.5
                 val ahead = hotspotsAhead(north(driven), 0.0, demoSpots)
                 shown = ahead.firstOrNull()?.let { (h, d) ->
-                    Shown("${BriefingEngine.distance(d)} 앞", "헤맴 구간", "다른 운전자 ${h.trips}명이 ${h.main.reason} 곳이에요. 미리 차로와 속도를 준비하세요.", Icon(Glyph.WARNING, false))
+                    Shown("${BriefingEngine.distance(d)} 앞", "헤맴 구간", "서로 다른 주행 ${h.trips}번에서 ${h.main.reason} 곳이에요. 미리 차로와 속도를 준비하세요.", Icon(Glyph.WARNING, false))
                 } ?: Shown("", "헤맴 지도 데모 주행 중", "")
                 render()
                 demoEngine.onHotspots(ahead).forEach(::say)
@@ -629,5 +639,7 @@ class MainActivity : Activity() {
 
 /** What the card shows: distance ahead (may be empty), what it is, what to do. */
 private data class Shown(val distance: String, val title: String, val tip: String, val icon: Icon? = null)
+
+private const val STOPPED_KMH = 5.0
 
 private val IDLE = Shown("", "경로를 설정하면", "어려운 구간을 1.5킬로미터 전에 미리 알려드릴게요.")

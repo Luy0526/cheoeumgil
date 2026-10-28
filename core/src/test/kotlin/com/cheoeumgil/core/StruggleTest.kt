@@ -40,6 +40,15 @@ class StruggleTest {
     }
 
     @Test
+    fun repeatedSignalStateIsNotAFlip() {
+        val d = StruggleDetector()
+        d.onLocation(home, 0)
+        listOf(true, true, true, false, false).forEachIndexed { i, on ->
+            assertNull(d.onTurnSignal(on, 1_000L * i))  // one lane change reported 5 times = 2 real changes
+        }
+    }
+
+    @Test
     fun cruiseDropAndRerouteNeedAPosition() {
         val d = StruggleDetector()
         assertNull(d.onReRoute(0))                 // no location yet

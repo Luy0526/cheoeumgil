@@ -35,7 +35,7 @@ object VoiceQuery {
             )
             Ask.WHY -> Answer(
                 next?.let(::why)
-                    ?: hotspot?.let { (h, _) -> "다른 운전자 ${h.trips}명이 그곳에서 ${reasonSentence(h.main)}" }
+                    ?: hotspot?.let { (h, _) -> "그곳은 서로 다른 주행 ${h.trips}번에서 ${reasonSentence(h.main)}" }
                     ?: "지금은 특별히 어려운 구간이 없어요."
             )
             Ask.REPEAT -> Answer(lastBriefing ?: "아직 드린 안내가 없어요.")

@@ -36,7 +36,7 @@ class VoiceQueryTest {
     fun hotspotWhenNoTurnSectionAndQuietSwitches() {
         val h = Hotspot(Spot(37.0, 127.0), 4, StruggleKind.SUDDEN_BRAKE) to 600.0
         assertEquals("600미터 앞에 다른 운전자들이 급하게 브레이크를 밟은 구간이 있어요.", VoiceQuery.answer(Ask.NEXT, null, 0, h, null).text)
-        assertEquals("다른 운전자 4명이 그곳에서 급하게 브레이크를 밟았어요. 속도를 미리 줄이세요.", VoiceQuery.answer(Ask.WHY, null, 0, h, null).text)
+        assertEquals("그곳은 서로 다른 주행 4번에서 급하게 브레이크를 밟았어요. 속도를 미리 줄이세요.", VoiceQuery.answer(Ask.WHY, null, 0, h, null).text)
         assertEquals(true, VoiceQuery.answer(Ask.QUIET, null, 0, null, null).setQuiet)
         assertEquals(false, VoiceQuery.answer(Ask.DETAIL, null, 0, null, null).setQuiet)
         assertNull(VoiceQuery.answer(Ask.NEXT, null, 0, null, null).setQuiet)

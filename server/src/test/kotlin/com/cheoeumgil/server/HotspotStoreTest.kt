@@ -34,4 +34,15 @@ class HotspotStoreTest {
         assertEquals(1, store.size())
         assertEquals(1, HotspotStore(file).size())
     }
+
+    @Test
+    fun failedWriteDoesNotSwallowTheRetry() {
+        val dir = File(System.getProperty("java.io.tmpdir"), "hotspot-${System.nanoTime()}")
+        val store = HotspotStore(File(dir, "events.csv")) // directory missing -> write fails
+        val batch = listOf(StruggleEvent(StruggleKind.REROUTE, spot, 1_000L, "trip-1"))
+        assertTrue(runCatching { store.add(batch) }.isFailure)
+        dir.mkdirs()
+        assertEquals(1, store.add(batch))
+        File(dir, "events.csv").delete(); dir.delete()
+    }
 }

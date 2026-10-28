@@ -24,9 +24,10 @@ class HotspotStore(private val file: File) {
     /** Returns how many events were new. */
     @Synchronized
     fun add(incoming: List<StruggleEvent>): Int {
-        val batch = incoming.distinct().filter { seen.add(it) }
+        val batch = incoming.distinct().filter { it !in seen }
         if (batch.isEmpty()) return 0
-        file.appendText(Wire.encodeEvents(batch) + "\n")
+        file.appendText(Wire.encodeEvents(batch) + "\n") // throws -> nothing marked seen, the client's retry is accepted
+        seen += batch
         events += batch
         cache = null
         return batch.size

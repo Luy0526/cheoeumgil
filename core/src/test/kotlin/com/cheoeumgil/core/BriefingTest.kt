@@ -76,4 +76,12 @@ class BriefingTest {
         assertEquals("350미터", BriefingEngine.distance(340.0))
         assertEquals("50미터", BriefingEngine.distance(10.0))
     }
+
+    @Test
+    fun routeSummaryOnceAndNotOnFamiliarRoutes() {
+        val e = BriefingEngine()
+        assertEquals("이번 경로에 어려운 구간이 2곳 있어요.", e.summary(route)) // underpass + right-right combo
+        assertEquals(null, e.summary(route))
+        assertEquals(null, BriefingEngine().apply { quiet = true }.summary(route))
+    }
 }

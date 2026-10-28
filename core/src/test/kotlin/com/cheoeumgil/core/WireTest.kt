@@ -36,5 +36,12 @@ class WireTest {
         val noTrip = e.copy(tripId = "")
         assertEquals(listOf(e), Wire.uploadable(listOf(nearHome, e, noTrip), listOf(home)))
         assertTrue(Wire.uploadable(listOf(nearHome), listOf(home, north(5000.0))).isEmpty())
+        assertTrue(Wire.uploadable(listOf(e), emptyList()).isEmpty()) // start unknown -> keep everything
+    }
+
+    @Test
+    fun hotspotQueryUsesACoarsePosition() {
+        assertEquals(Spot(37.41, 127.09), Wire.coarse(home))
+        assertTrue(StruggleDetector.metres(home, Wire.coarse(home)) < 1_000)
     }
 }

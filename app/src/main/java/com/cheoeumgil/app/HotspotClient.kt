@@ -22,9 +22,10 @@ class HotspotClient(private val baseUrl: String) {
         c.responseCode == 200
     }.getOrDefault(false)
 
-    /** Hotspots within [radiusM] of [here], or null when the server can't be reached. */
+    /** Hotspots within [radiusM] of [here] (sent as a ~1 km grid cell), or null when the server can't be reached. */
     fun near(here: Spot, radiusM: Int = 30_000): List<Hotspot>? = runCatching {
-        val c = open("/v1/hotspots?lat=${here.lat}&lon=${here.lon}&radiusM=$radiusM")
+        val q = Wire.coarse(here)
+        val c = open("/v1/hotspots?lat=${q.lat}&lon=${q.lon}&radiusM=$radiusM")
         if (c.responseCode != 200) null else Wire.decodeHotspots(c.inputStream.bufferedReader().readText())
     }.getOrNull()
 

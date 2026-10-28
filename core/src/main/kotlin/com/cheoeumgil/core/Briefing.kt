@@ -24,6 +24,7 @@ class BriefingEngine(
     private val cautionM: Int = 1000,
 ) {
     private val spoken = mutableSetOf<String>()
+    private var summarized = false
 
     /** Familiar route: only the near reminder for genuinely hard sections (no early briefings, no plain combos). */
     var quiet = false
@@ -52,6 +53,14 @@ class BriefingEngine(
             return listOf(phrase(t, ahead, next, near))
         }
         return emptyList()
+    }
+
+    /** Once per route, on the first TBT list: how many hard sections lie ahead. Skipped on familiar routes. */
+    fun summary(turns: List<Turn>): String? {
+        if (summarized || turns.isEmpty()) return null
+        summarized = true
+        val n = hardSections(turns, Double.MAX_VALUE).size
+        return if (quiet || n == 0) null else "이번 경로에 어려운 구간이 ${n}곳 있어요."
     }
 
     // TBT drops passed items from the front, so position-from-the-end is a stable id

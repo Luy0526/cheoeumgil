@@ -31,9 +31,12 @@ class StruggleDetector(
     var tripId = ""
     private var spot: Spot? = null
     private var lastFix: Pair<Spot, Long>? = null
-    private var speedKmh = 0.0
+    /** Estimated from consecutive location fixes. */
+    var speedKmh = 0.0
+        private set
     private var brakeAt: Pair<Long, Double>? = null  // time, speed when brake went down
     private val flips = ArrayDeque<Long>()
+    private var signalOn = false
     private var cruiseActive = false
 
     /** Location updates also give a speed estimate (NaviHelper has no speed field). */
@@ -56,6 +59,8 @@ class StruggleDetector(
     }
 
     fun onTurnSignal(on: Boolean, timeMs: Long): StruggleEvent? {
+        if (on == signalOn) return null // repeated state reports (e.g. LEFT then BOTH) are not flips
+        signalOn = on
         flips.addLast(timeMs)
         while (flips.isNotEmpty() && timeMs - flips.first() > signalWindowMs) flips.removeFirst()
         if (on || flips.size < signalFlips) return null

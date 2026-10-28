@@ -39,8 +39,12 @@ object Wire {
 
     /**
      * Privacy: events near where a trip started or ended (home, work) never leave the car.
-     * Also drops events without a trip id.
+     * Fails closed: with no private spots known, nothing is uploaded. Also drops events without a trip id.
      */
     fun uploadable(events: List<StruggleEvent>, privateSpots: List<Spot>, radiusM: Double = 300.0) =
-        events.filter { e -> TRIP_ID.matches(e.tripId) && privateSpots.none { StruggleDetector.metres(it, e.spot) <= radiusM } }
+        if (privateSpots.isEmpty()) emptyList()
+        else events.filter { e -> TRIP_ID.matches(e.tripId) && privateSpots.none { StruggleDetector.metres(it, e.spot) <= radiusM } }
+
+    /** Position snapped to a 0.01° grid (~1 km) for hotspot queries, so the exact start never leaves the car. */
+    fun coarse(s: Spot) = Spot(Math.round(s.lat * 100) / 100.0, Math.round(s.lon * 100) / 100.0)
 }
