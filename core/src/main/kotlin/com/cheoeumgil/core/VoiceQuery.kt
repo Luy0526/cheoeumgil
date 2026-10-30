@@ -48,7 +48,7 @@ object VoiceQuery {
     private fun reasonSentence(kind: StruggleKind) = when (kind) {
         StruggleKind.REROUTE -> "경로를 벗어났어요. 갈림길을 미리 확인하세요."
         StruggleKind.SUDDEN_BRAKE -> "급하게 브레이크를 밟았어요. 속도를 미리 줄이세요."
-        StruggleKind.SIGNAL_HESITATION -> "차로 변경을 망설였어요. 미리 차로를 옮겨 두세요."
+        StruggleKind.SIGNAL_HESITATION -> "차로 변경을 망설였어요. 안내 경로를 미리 확인하세요."
         StruggleKind.CRUISE_DROP -> "크루즈가 꺼졌어요. 직접 속도를 조절할 준비를 하세요."
     }
 
@@ -65,7 +65,7 @@ object VoiceQuery {
             t.startsWith("TURN_ENTER_IC") || t.startsWith("TURN_EXIT_IC") -> "나들목은 진입로와 출구가 짧아서 속도와 차로를 미리 맞춰야 해요."
             t.startsWith("TURN_ENTER_ROUNDABOUT") -> "회전교차로는 이미 돌고 있는 차가 우선이라, 진입 전에 속도를 줄여야 해요."
             t == "TURN_DEVIDE_MERGE" -> "합류 구간은 옆 차로 차와 속도를 맞춰야 해서 처음 가면 긴장되기 쉬워요."
-            t == "TURN_UTURN" -> "유턴은 신호와 맞은편 차를 함께 봐야 해서, 미리 1차로에 있어야 해요."
+            t == "TURN_UTURN" -> "유턴은 신호와 맞은편 차를 함께 봐야 해서, 유턴할 수 있는 곳을 미리 알아 두는 게 좋아요."
             t.startsWith("TURN_SHARP") -> "길이 급하게 꺾여서 속도를 충분히 줄이지 않으면 위험해요."
             t == "TURN_TOLL" -> "요금소는 하이패스 차로와 일반 차로가 갈라져서 미리 골라야 해요."
             else -> "처음 가는 길에서 놓치기 쉬운 구간이에요."

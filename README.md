@@ -6,6 +6,7 @@
 
 - NaviHelper 회전 안내(TBT)와 주의 지점을 받아 어려운 구간(갈림길, 지하차도·고가 옆길, 나들목, 회전교차로, 합류, 300m 안에 이어지는 연속 회전 등)을 고른다.
 - 1.5km 앞에서 한 번, 400m 앞에서 한 번 Pleos TextToSpeech(ON_DEVICE)로 읽어 주고 화면 카드에 표시한다. 경로를 시작하면 어려운 구간 수를 먼저 요약한다("이번 경로에 어려운 구간이 2곳 있어요").
+- 안내 문장은 차로를 지정하지 않는다. TBT에는 회전 방향만 있고 차로 정보가 없어서, "지하차도와 갈라지니, 지하차도가 아닌 오른쪽 옆길인지 미리 확인하세요"처럼 갈 길을 확인하게 한다.
 - 안내 문장은 순서대로 하나씩 읽는다. TTS 준비 전이나 다른 문장을 읽는 중에 생긴 안내도 버리지 않고 기다렸다 읽는다(최대 3개).
 - 헤맴 지도: 경로 재탐색, 급제동(브레이크 후 3초 안에 시속 20km 이상 감속), 방향지시등 망설임(30초 안에 4번 켜고 끔), 크루즈 해제를 감지해 `files/struggle_events.csv`에 `종류,위도,경도,시각ms,주행ID`로 저장한다.
 - 서로 다른 주행 3회 이상 헤맨 반경 50m 지점을 헤맴 구간으로 묶고, 진행 방향 ±45°, 1.5km 안에 들어오면 음성으로 알린다.
@@ -47,7 +48,7 @@
 - Pleos Connect Emulator 2.1.0, Android 14 (API 34), Apple Silicon Mac
 - Gradle 9.1.0, AGP 8.13.0, Kotlin 2.2.20, JDK 25 (Android Studio 내장 JBR)
 - SDK: Vehicle 2.3.2, NaviHelper 3.0.5, TextToSpeech 3.3.1, SpeechToText 3.3.1
-- 단위 테스트: `./gradlew :core:test :server:test` 28건: 브리핑 7, 헤맴 지도 6, 익숙한 길 2, 음성 질의 3, 음성 출력 순서 2, 서버 통신 형식 4, 아이콘 1, 서버 저장소 3
+- 단위 테스트: `./gradlew :core:test :server:test` 29건: 브리핑 8(차로 지정 금지 확인 포함), 헤맴 지도 6, 익숙한 길 2, 음성 질의 3, 음성 출력 순서 2, 서버 통신 형식 4, 아이콘 1, 서버 저장소 3
 - 마이크 없이 음성 질의 테스트 (debug 빌드): 16kHz 16-bit mono PCM을 앱의 `files/query.pcm`에 넣고 `adb shell am start -n com.cheoeumgil.app/.MainActivity --ez stt_file_test true`
 
 ## 알려진 제약

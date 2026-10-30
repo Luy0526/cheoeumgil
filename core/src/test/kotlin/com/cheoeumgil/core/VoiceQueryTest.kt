@@ -21,7 +21,7 @@ class VoiceQueryTest {
 
     @Test
     fun answersFromCurrentRouteState() {
-        assertEquals("1.2킬로미터 앞 지하차도 옆길이에요. 지하차도로 들어가지 않도록 오른쪽 차로를 유지하세요.",
+        assertEquals("1.2킬로미터 앞 지하차도 옆길이에요. 지하차도와 갈라지니, 지하차도가 아닌 오른쪽 옆길인지 미리 확인하세요.",
             VoiceQuery.answer(Ask.NEXT, underpass, 3, null, null).text)
         assertEquals("입구와 옆길이 바로 붙어 있어서, 차로를 늦게 고르면 원하지 않는 길로 들어가기 쉬워요.",
             VoiceQuery.answer(Ask.WHY, underpass, 3, null, null).text)

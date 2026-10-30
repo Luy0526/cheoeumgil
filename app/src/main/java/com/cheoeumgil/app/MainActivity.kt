@@ -617,7 +617,7 @@ class MainActivity : Activity() {
                 driven += 16.5
                 val ahead = hotspotsAhead(north(driven), 0.0, demoSpots)
                 shown = ahead.firstOrNull()?.let { (h, d) ->
-                    Shown("${BriefingEngine.distance(d)} 앞", "헤맴 구간", "서로 다른 주행 ${h.trips}번에서 ${h.main.reason} 곳이에요. 미리 차로와 속도를 준비하세요.", Icon(Glyph.WARNING, false))
+                    Shown("${BriefingEngine.distance(d)} 앞", "헤맴 구간", "서로 다른 주행 ${h.trips}번에서 ${h.main.reason} 곳이에요. 속도를 줄이고 안내 경로를 미리 확인하세요.", Icon(Glyph.WARNING, false))
                 } ?: Shown("", "헤맴 지도 데모 주행 중", "")
                 render()
                 demoEngine.onHotspots(ahead).forEach(::say)
