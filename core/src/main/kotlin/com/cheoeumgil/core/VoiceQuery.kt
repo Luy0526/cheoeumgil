@@ -46,11 +46,11 @@ object VoiceQuery {
         }
 
     private fun reasonSentence(kind: StruggleKind) = when (kind) {
-        StruggleKind.REROUTE -> "경로를 벗어났어요. 갈림길을 미리 확인하세요."
-        StruggleKind.SUDDEN_BRAKE -> "급하게 브레이크를 밟았어요. 속도를 미리 줄이세요."
-        StruggleKind.SIGNAL_HESITATION -> "차로 변경을 망설였어요. 안내 경로를 미리 확인하세요."
-        StruggleKind.CRUISE_DROP -> "크루즈가 꺼졌어요. 직접 속도를 조절할 준비를 하세요."
-    }
+        StruggleKind.REROUTE -> "경로를 벗어났어요."
+        StruggleKind.SUDDEN_BRAKE -> "급하게 브레이크를 밟았어요."
+        StruggleKind.SIGNAL_HESITATION -> "차로 변경을 망설였어요."
+        StruggleKind.CRUISE_DROP -> "크루즈가 꺼졌어요."
+    } + " " + kind.tip
 
     /** Why a section is hard, in one sentence a driver can take in. */
     fun why(s: Section): String {

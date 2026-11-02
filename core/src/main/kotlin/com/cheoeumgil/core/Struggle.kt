@@ -6,12 +6,12 @@ import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sqrt
 
-/** Signs that a driver struggled at a spot. */
-enum class StruggleKind(val reason: String) {
-    REROUTE("경로를 자주 벗어난"),
-    SUDDEN_BRAKE("급하게 브레이크를 밟은"),
-    SIGNAL_HESITATION("차로 변경을 망설인"),
-    CRUISE_DROP("크루즈가 자주 꺼진"),
+/** Signs that a driver struggled at a spot, and what to do before reaching it. */
+enum class StruggleKind(val reason: String, val tip: String) {
+    REROUTE("경로를 자주 벗어난", "놓치기 쉬운 곳이니, 갈 길을 미리 준비하세요."),
+    SUDDEN_BRAKE("급하게 브레이크를 밟은", "속도를 미리 줄이세요."),
+    SIGNAL_HESITATION("차로 변경을 망설인", "직전엔 끼어들기 어려울 수 있으니, 일찍 옮겨 갈 준비를 하세요."),
+    CRUISE_DROP("크루즈가 자주 꺼진", "직접 속도를 조절할 준비를 하세요."),
 }
 
 data class Spot(val lat: Double, val lon: Double)

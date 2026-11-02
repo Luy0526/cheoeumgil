@@ -80,7 +80,7 @@ class StruggleTest {
         assertEquals(500.0, found.single().second, 1.0)
 
         val e = BriefingEngine()
-        assertEquals(listOf("500미터 앞은 다른 운전자들이 경로를 자주 벗어난 구간이에요. 속도를 줄이고 안내 경로를 미리 확인하세요."), e.onHotspots(found))
+        assertEquals(listOf("500미터 앞은 다른 운전자들이 경로를 자주 벗어난 구간이에요. 놓치기 쉬운 곳이니, 갈 길을 미리 준비하세요."), e.onHotspots(found))
         assertTrue(e.onHotspots(found).isEmpty())
     }
 }

@@ -73,7 +73,7 @@ class BriefingEngine(
     /** 헤맴 지도 hotspots ahead (nearest first, from [hotspotsAhead]); one briefing per update, once per hotspot. */
     fun onHotspots(ahead: List<Pair<Hotspot, Double>>): List<String> =
         ahead.firstOrNull { (h, d) -> d <= earlyM && spoken.add("hotspot|${h.spot}") }
-            ?.let { (h, d) -> listOf("${distance(d)} 앞은 다른 운전자들이 ${h.main.reason} 구간이에요. 속도를 줄이고 안내 경로를 미리 확인하세요.") }
+            ?.let { (h, d) -> listOf("${distance(d)} 앞은 다른 운전자들이 ${h.main.reason} 구간이에요. ${h.main.tip}") }
             ?: emptyList()
 
     /** Hard sections (with distance ahead) within [rangeM], nearest first. */
@@ -113,23 +113,24 @@ class BriefingEngine(
         }
 
         /**
-         * (what it is, what to do). TBT gives the turn's side, not lane data, so tips point at the road to
-         * take and ask the driver to check it; they never name or hold a lane.
+         * (what it is, what to do). The navi already says where to go; tips say why to get ready early
+         * (a late lane change is hard there) and point at the road to take. TBT gives the turn's side,
+         * not lane data, so they never name, hold or order a lane.
          */
         fun action(type: String): Pair<String, String> {
             val s = side(type)
             return when {
                 type == "TURN_LEFT" -> "좌회전" to "미리 좌회전할 준비를 하세요."
                 type == "TURN_RIGHT" -> "우회전" to "미리 우회전할 준비를 하세요."
-                type.startsWith("TURN_KEEP") -> "갈림길 ${s} 길" to "갈림길 직전에 급하게 바꾸지 않도록 ${s} 길인지 미리 확인하세요."
+                type.startsWith("TURN_KEEP") -> "갈림길 ${s} 길" to "갈림길 직전엔 옮기기 어려우니, 지금부터 ${s} 길로 갈 준비를 하세요."
                 type.startsWith("TURN_SHARP") -> "급하게 꺾이는 ${s} 길" to "속도를 충분히 줄이세요."
                 type == "TURN_UTURN" -> "유턴" to "유턴할 수 있는 곳과 신호를 미리 확인하세요."
                 type.startsWith("TURN_ENTER_IC") -> "나들목 진입" to "진입로가 짧을 수 있어요. 속도를 맞춰 들어가세요."
-                type.startsWith("TURN_EXIT_IC") -> "나들목 출구" to "${s} 출구를 놓치지 않게 미리 준비하세요."
-                type.startsWith("TURN_ENTER_UNDER") -> "지하차도 진입" to "옆길과 갈라지니, 지하차도로 들어가는 ${s} 길인지 미리 확인하세요."
-                type.startsWith("TURN_AVOID_UNDER") -> "지하차도 옆길" to "지하차도와 갈라지니, 지하차도가 아닌 ${s} 옆길인지 미리 확인하세요."
-                type.startsWith("TURN_ENTER_OVER") -> "고가차도 진입" to "옆길과 갈라지니, 고가차도로 올라가는 ${s} 길인지 미리 확인하세요."
-                type.startsWith("TURN_AVOID_OVER") -> "고가차도 옆길" to "고가차도와 갈라지니, 고가차도가 아닌 ${s} 옆길인지 미리 확인하세요."
+                type.startsWith("TURN_EXIT_IC") -> "나들목 출구" to "출구 직전엔 끼어들기 어려우니, 지금부터 ${s} 출구로 나갈 준비를 하세요."
+                type.startsWith("TURN_ENTER_UNDER") -> "지하차도 진입" to "옆길과 바로 갈라져 직전엔 옮기기 어려우니, 지금부터 지하차도 쪽 ${s} 길로 갈 준비를 하세요."
+                type.startsWith("TURN_AVOID_UNDER") -> "지하차도 옆길" to "입구와 옆길이 붙어 있어 직전엔 옮기기 어려우니, 지금부터 ${s} 옆길로 갈 준비를 하세요."
+                type.startsWith("TURN_ENTER_OVER") -> "고가차도 진입" to "옆길과 바로 갈라져 직전엔 옮기기 어려우니, 지금부터 고가차도 쪽 ${s} 길로 갈 준비를 하세요."
+                type.startsWith("TURN_AVOID_OVER") -> "고가차도 옆길" to "입구와 옆길이 붙어 있어 직전엔 옮기기 어려우니, 지금부터 ${s} 옆길로 갈 준비를 하세요."
                 type.startsWith("TURN_ENTER_ROUNDABOUT") ->
                     "회전교차로 ${type.takeLast(2).trimStart('0')}시 방향" to "진입 전에 속도를 줄이고, 먼저 돌고 있는 차를 보내세요."
                 type == "TURN_EXIT_ROUNDABOUT" -> "회전교차로 출구" to "나가기 전에 오른쪽 깜빡이를 켜세요."

@@ -601,14 +601,14 @@ class MainActivity : Activity() {
     }
 
     /**
-     * Shows the 헤맴 지도 pipeline end to end: three synthetic trips that re-routed at one spot (demo-only data,
+     * Shows the 헤맴 지도 pipeline end to end: three synthetic trips that hesitated over a lane change at one spot (demo-only data,
      * never saved) become a hotspot, then the car drives north toward it and gets briefed.
      */
     private fun startHotspotDemo() {
         ui.removeCallbacksAndMessages(null)
         val start = Spot(37.4127, 127.0947)
         fun north(m: Double) = start.copy(lat = start.lat + m / 111_320.0)
-        val demoSpots = hotspots((1..3).map { StruggleEvent(StruggleKind.REROUTE, north(1200.0 + it * 5), 0, "demo-$it") })
+        val demoSpots = hotspots((1..3).map { StruggleEvent(StruggleKind.SIGNAL_HESITATION, north(1200.0 + it * 5), 0, "demo-$it") })
         val demoEngine = BriefingEngine()
         log("DEMO", "가상 기록 3건 -> 헤맴 구간 ${demoSpots.size}곳 (북쪽 1.2km)")
         var driven = 0.0
@@ -617,7 +617,7 @@ class MainActivity : Activity() {
                 driven += 16.5
                 val ahead = hotspotsAhead(north(driven), 0.0, demoSpots)
                 shown = ahead.firstOrNull()?.let { (h, d) ->
-                    Shown("${BriefingEngine.distance(d)} 앞", "헤맴 구간", "서로 다른 주행 ${h.trips}번에서 ${h.main.reason} 곳이에요. 속도를 줄이고 안내 경로를 미리 확인하세요.", Icon(Glyph.WARNING, false))
+                    Shown("${BriefingEngine.distance(d)} 앞", "헤맴 구간", "서로 다른 주행 ${h.trips}번에서 ${h.main.reason} 곳이에요. ${h.main.tip}", Icon(Glyph.WARNING, false))
                 } ?: Shown("", "헤맴 지도 데모 주행 중", "")
                 render()
                 demoEngine.onHotspots(ahead).forEach(::say)

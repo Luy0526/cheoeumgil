@@ -21,14 +21,14 @@ class BriefingTest {
         val e = BriefingEngine()
         // plain left/right turns are skipped; the underpass bypass 1.2km ahead is briefed early
         assertEquals(
-            listOf("1.2킬로미터 앞 판교IC 방면 지하차도 옆길이에요. 지하차도와 갈라지니, 지하차도가 아닌 오른쪽 옆길인지 미리 확인하세요."),
+            listOf("1.2킬로미터 앞 판교IC 방면 지하차도 옆길이에요. 입구와 옆길이 붙어 있어 직전엔 옮기기 어려우니, 지금부터 오른쪽 옆길로 갈 준비를 하세요."),
             e.onTurns(route),
         )
         assertTrue(e.onTurns(route).isEmpty()) // same list again: nothing repeated
 
         // car passed the first two turns, underpass is 350m away -> short reminder
         val later = listOf(route[2].copy(gapM = 350.0)) + route.drop(3)
-        assertEquals(listOf("곧 판교IC 방면 지하차도 옆길이에요. 지하차도와 갈라지니, 지하차도가 아닌 오른쪽 옆길인지 미리 확인하세요."), e.onTurns(later))
+        assertEquals(listOf("곧 판교IC 방면 지하차도 옆길이에요. 입구와 옆길이 붙어 있어 직전엔 옮기기 어려우니, 지금부터 오른쪽 옆길로 갈 준비를 하세요."), e.onTurns(later))
         // one briefing per update: the back-to-back right turns come on the next update, once
         assertEquals(
             listOf("1.2킬로미터 앞 경기창조경제혁신센터 방면 우회전이에요. 바로 200미터 뒤에 우회전이 이어지니, 미리 우회전할 준비를 하세요."),
@@ -87,13 +87,13 @@ class BriefingTest {
 
     @Test
     fun tipsNeverDirectALane() {
-        // TBT has no lane data, so no tip may tell the driver which lane to be in
+        // TBT has no lane data, so no tip may tell the driver which lane to be in or to move over
         val types = listOf("TURN_LEFT", "TURN_RIGHT", "TURN_KEEP_R", "TURN_SHARP_L", "TURN_UTURN", "TURN_ENTER_IC_R", "TURN_EXIT_IC_R",
             "TURN_ENTER_UNDER_L", "TURN_AVOID_UNDER_R", "TURN_ENTER_OVER_L", "TURN_AVOID_OVER_R", "TURN_ENTER_ROUNDABOUT_09",
             "TURN_EXIT_ROUNDABOUT", "TURN_DEVIDE_MERGE", "TURN_TOLL", "TURN_RESTAREA", "TURN_OTHER")
         for (t in types) {
             val tip = BriefingEngine.action(t).second
-            assertTrue("$t: $tip", listOf("차로를 유지", "차로로", "1차로").none { it in tip })
+            assertTrue("$t: $tip", listOf("차로를 유지", "차로로", "1차로", "붙어 두", "옮기세요", "길인지").none { it in tip })
         }
     }
 }
