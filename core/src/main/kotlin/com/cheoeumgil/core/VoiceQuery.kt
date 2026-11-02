@@ -29,7 +29,7 @@ object VoiceQuery {
     fun answer(ask: Ask, next: Section?, aheadCount: Int, hotspot: Pair<Hotspot, Double>?, lastBriefing: String?): Answer =
         when (ask) {
             Ask.NEXT -> Answer(
-                next?.let { "${BriefingEngine.distance(it.aheadM)} 앞 ${it.title}이에요. ${BriefingEngine.action((it.next ?: it.turn).type).second}" }
+                next?.let { "${BriefingEngine.copula("${BriefingEngine.distance(it.aheadM)} 앞 ${it.title}")}. ${BriefingEngine.action((it.next ?: it.turn).type).second}" }
                     ?: hotspot?.let { (h, d) -> "${BriefingEngine.distance(d)} 앞에 다른 운전자들이 ${h.main.reason} 구간이 있어요." }
                     ?: "1.5킬로미터 안에는 어려운 구간이 없어요."
             )

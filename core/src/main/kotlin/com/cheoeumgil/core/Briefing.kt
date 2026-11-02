@@ -68,7 +68,7 @@ class BriefingEngine(
 
     fun onCautions(points: List<Caution>): List<String> =
         points.filter { it.remainM <= cautionM && it.type in CAUTION_NAMES && spoken.add("caution|${it.id}") }
-            .map { "${distance(it.remainM.toDouble())} 앞 ${CAUTION_NAMES[it.type]}이에요. ${cautionTip(it.type)}" }
+            .map { "${distance(it.remainM.toDouble())} 앞 ${copula(CAUTION_NAMES.getValue(it.type))}. ${cautionTip(it.type)}" }
 
     /** 헤맴 지도 hotspots ahead (nearest first, from [hotspotsAhead]); one briefing per update, once per hotspot. */
     fun onHotspots(ahead: List<Pair<Hotspot, Double>>): List<String> =
@@ -105,6 +105,14 @@ class BriefingEngine(
         fun distance(m: Double): String =
             if (m >= 1000) "${((m / 100).roundToInt() / 10.0).toString().removeSuffix(".0")}킬로미터"
             else "${maxOf(50, (m / 50).roundToInt() * 50)}미터"
+
+        private fun hasBatchim(w: String) = w.lastOrNull()?.let { it in '가'..'힣' && (it - '가') % 28 != 0 } ?: false
+
+        /** "요금소" -> "요금소예요", "갈림길" -> "갈림길이에요". */
+        fun copula(w: String) = w + if (hasBatchim(w)) "이에요" else "예요"
+
+        /** "요금소" -> "요금소가", "우회전" -> "우회전이". */
+        fun subject(w: String) = w + if (hasBatchim(w)) "이" else "가"
 
         private fun side(type: String) = when {
             type.endsWith("_R") -> "오른쪽"
@@ -145,8 +153,8 @@ class BriefingEngine(
             val (what, tip) = action(t.type)
             val where = t.description.takeIf { it.isNotBlank() && it != "이름 없는 도로" }?.let { "$it " } ?: ""
             val head = if (near) "곧 $where$what" else "${distance(aheadM)} 앞 $where$what"
-            val combo = next?.let { " 바로 ${distance(it.gapM)} 뒤에 ${action(it.type).first}이 이어지니, ${action(it.type).second}" } ?: " $tip"
-            return "${head}이에요.$combo"
+            val combo = next?.let { " 바로 ${distance(it.gapM)} 뒤에 ${subject(action(it.type).first)} 이어지니, ${action(it.type).second}" } ?: " $tip"
+            return "${copula(head)}.$combo"
         }
 
         val CAUTION_NAMES = mapOf(

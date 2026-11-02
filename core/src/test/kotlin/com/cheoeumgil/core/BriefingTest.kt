@@ -96,4 +96,12 @@ class BriefingTest {
             assertTrue("$t: $tip", listOf("차로를 유지", "차로로", "1차로", "붙어 두", "옮기세요", "길인지").none { it in tip })
         }
     }
+
+    @Test
+    fun particlesFollowTheLastSyllable() {
+        assertEquals("1.5킬로미터 앞 요금소예요. 하이패스 차로인지 미리 확인하세요.",
+            BriefingEngine.phrase(Turn("TURN_TOLL", 1500.0, ""), 1500.0, null, near = false))
+        assertEquals("곧 나들목 출구예요. 바로 200미터 뒤에 요금소가 이어지니, 하이패스 차로인지 미리 확인하세요.",
+            BriefingEngine.phrase(Turn("TURN_EXIT_IC_R", 400.0, ""), 400.0, Turn("TURN_TOLL", 200.0, ""), near = true))
+    }
 }
