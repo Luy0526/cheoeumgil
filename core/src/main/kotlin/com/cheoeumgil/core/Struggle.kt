@@ -4,19 +4,22 @@ import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
+import kotlin.math.sin
 import kotlin.math.sqrt
 
 /** Signs that a driver struggled at a spot, and what to do before reaching it. */
 enum class StruggleKind(val reason: String, val tip: String) {
-    REROUTE("경로를 자주 벗어난", "놓치기 쉬운 곳이니, 갈 길을 미리 준비하세요."),
+    REROUTE("경로를 벗어난", "놓치기 쉬운 곳이니, 갈 길을 미리 준비하세요."),
     SUDDEN_BRAKE("급하게 브레이크를 밟은", "속도를 미리 줄이세요."),
-    SIGNAL_HESITATION("차로 변경을 망설인", "직전엔 끼어들기 어려울 수 있으니, 일찍 옮겨 갈 준비를 하세요."),
-    CRUISE_DROP("크루즈가 자주 꺼진", "직접 속도를 조절할 준비를 하세요."),
+    /** Signal held on a long time without turning off the road: wanted to change lanes but could not get in. */
+    SIGNAL_HESITATION("깜빡이를 켜고 한참 못 끼어든", "직전엔 끼어들기 어려울 수 있으니, 일찍 옮겨 갈 준비를 하세요."),
+    CRUISE_DROP("크루즈가 꺼진", "직접 속도를 조절할 준비를 하세요."),
 }
 
 data class Spot(val lat: Double, val lon: Double)
 
-data class StruggleEvent(val kind: StruggleKind, val spot: Spot, val timeMs: Long, val tripId: String)
+/** [headingDeg] = driving direction, so a spot on the other carriageway is not mixed in. */
+data class StruggleEvent(val kind: StruggleKind, val spot: Spot, val timeMs: Long, val tripId: String, val headingDeg: Double = 0.0)
 
 /**
  * Turns raw vehicle/navi signals into struggle events. Pure Kotlin; the activity feeds it
@@ -25,28 +28,30 @@ data class StruggleEvent(val kind: StruggleKind, val spot: Spot, val timeMs: Lon
 class StruggleDetector(
     private val brakeWindowMs: Long = 3_000,     // speed drop must happen within this after the brake
     private val brakeDropKmh: Double = 20.0,
-    private val signalWindowMs: Long = 30_000,   // on/off flips counted within this window
-    private val signalFlips: Int = 4,            // ON,OFF,ON,OFF = changed its mind
+    private val signalHoldMs: Long = 8_000,      // a normal lane change signals for a few seconds
+    private val turnDeg: Double = 45.0,          // heading changed this much = turned at a junction, not a lane change
 ) {
     var tripId = ""
     private var spot: Spot? = null
+    private var heading = 0.0
     private var lastFix: Pair<Spot, Long>? = null
     /** Estimated from consecutive location fixes. */
     var speedKmh = 0.0
         private set
     private var brakeAt: Pair<Long, Double>? = null  // time, speed when brake went down
-    private val flips = ArrayDeque<Long>()
-    private var signalOn = false
+    private var signalOnAt: Long? = null
+    private var signalOnHeading = 0.0
     private var cruiseActive = false
 
     /** Location updates also give a speed estimate (NaviHelper has no speed field). */
-    fun onLocation(s: Spot, timeMs: Long): StruggleEvent? {
+    fun onLocation(s: Spot, timeMs: Long, headingDeg: Double): StruggleEvent? {
         lastFix?.let { (prev, t) ->
             val dt = (timeMs - t) / 1000.0
             if (dt > 0) speedKmh = metres(prev, s) / dt * 3.6
         }
         lastFix = s to timeMs
         spot = s
+        heading = headingDeg
         val (bt, v0) = brakeAt ?: return null
         if (timeMs - bt > brakeWindowMs) { brakeAt = null; return null }
         if (v0 - speedKmh < brakeDropKmh) return null
@@ -58,13 +63,19 @@ class StruggleDetector(
         if (pressed) brakeAt = timeMs to speedKmh
     }
 
+    /**
+     * Signal on, then off. Held [signalHoldMs] or longer while still heading the same way = the driver kept waiting
+     * for a gap (stop-and-go included). A long signal that ends in a turn was a junction turn, e.g. waiting at a light.
+     * Repeated "on" reports (e.g. LEFT then RIGHT) keep the original start.
+     */
     fun onTurnSignal(on: Boolean, timeMs: Long): StruggleEvent? {
-        if (on == signalOn) return null // repeated state reports (e.g. LEFT then BOTH) are not flips
-        signalOn = on
-        flips.addLast(timeMs)
-        while (flips.isNotEmpty() && timeMs - flips.first() > signalWindowMs) flips.removeFirst()
-        if (on || flips.size < signalFlips) return null
-        flips.clear()
+        val since = signalOnAt
+        if (on) {
+            if (since == null) { signalOnAt = timeMs; signalOnHeading = heading }
+            return null
+        }
+        signalOnAt = null
+        if (since == null || timeMs - since < signalHoldMs || angleDiff(heading, signalOnHeading) > turnDeg) return null
         return event(StruggleKind.SIGNAL_HESITATION, timeMs)
     }
 
@@ -76,7 +87,7 @@ class StruggleDetector(
 
     fun onReRoute(timeMs: Long) = event(StruggleKind.REROUTE, timeMs)
 
-    private fun event(kind: StruggleKind, timeMs: Long) = spot?.let { StruggleEvent(kind, it, timeMs, tripId) }
+    private fun event(kind: StruggleKind, timeMs: Long) = spot?.let { StruggleEvent(kind, it, timeMs, tripId, heading) }
 
     companion object {
         fun metres(a: Spot, b: Spot): Double {
@@ -91,35 +102,46 @@ class StruggleDetector(
             val dLon = (b.lon - a.lon) * cos(a.lat * PI / 180)
             return (atan2(dLon, dLat) * 180 / PI + 360) % 360
         }
+
+        /** Smallest difference between two compass directions, 0..180. */
+        fun angleDiff(a: Double, b: Double) = abs(((a - b + 540) % 360) - 180)
+
+        fun meanHeading(hs: List<Double>) =
+            (atan2(hs.sumOf { sin(it * PI / 180) }, hs.sumOf { cos(it * PI / 180) }) * 180 / PI + 360) % 360
     }
 }
 
-data class Hotspot(val spot: Spot, val trips: Int, val main: StruggleKind)
+data class Hotspot(val spot: Spot, val trips: Int, val main: StruggleKind, val headingDeg: Double = 0.0)
 
 /**
- * 헤맴 지도: clusters events lying within [radiusM] of each other (fixed grid cells would split a spot
- * sitting on a cell edge) and keeps clusters where several different trips struggled.
+ * 헤맴 지도: clusters events lying within [radiusM] of each other and driving the same way (fixed grid cells
+ * would split a spot sitting on a cell edge) and keeps clusters where several different trips struggled.
  * ponytail: greedy O(n²) clustering on-device for the prototype; move to the server with a spatial index once events pile up.
  */
-fun hotspots(events: List<StruggleEvent>, minTrips: Int = 3, radiusM: Double = 50.0): List<Hotspot> {
+fun hotspots(events: List<StruggleEvent>, minTrips: Int = 3, radiusM: Double = 50.0, maxTurnDeg: Double = 45.0): List<Hotspot> {
     fun centre(c: List<StruggleEvent>) = Spot(c.map { it.spot.lat }.average(), c.map { it.spot.lon }.average())
+    fun heading(c: List<StruggleEvent>) = StruggleDetector.meanHeading(c.map { it.headingDeg })
     val clusters = mutableListOf<MutableList<StruggleEvent>>()
     for (e in events) {
-        clusters.firstOrNull { StruggleDetector.metres(centre(it), e.spot) <= radiusM }?.add(e)
-            ?: clusters.add(mutableListOf(e))
+        clusters.firstOrNull {
+            StruggleDetector.metres(centre(it), e.spot) <= radiusM && StruggleDetector.angleDiff(heading(it), e.headingDeg) <= maxTurnDeg
+        }?.add(e) ?: clusters.add(mutableListOf(e))
     }
     return clusters.mapNotNull { c ->
         val trips = c.map { it.tripId }.distinct().size
         if (trips < minTrips) null
-        else Hotspot(centre(c), trips, c.groupingBy { it.kind }.eachCount().maxBy { it.value }.key)
+        else Hotspot(centre(c), trips, c.groupingBy { it.kind }.eachCount().maxBy { it.value }.key, heading(c))
     }
 }
 
-/** Hotspots within [rangeM] and roughly in the driving direction, nearest first. */
+/**
+ * Hotspots within [rangeM], roughly in front, recorded while driving the same way, nearest first.
+ * ponytail: straight-line, not along the route (NaviHelper gives no route shape); a parallel road the same way can still match.
+ */
 fun hotspotsAhead(here: Spot, headingDeg: Double, spots: List<Hotspot>, rangeM: Double = 1500.0): List<Pair<Hotspot, Double>> =
     spots.map { it to StruggleDetector.metres(here, it.spot) }
         .filter { (h, d) ->
-            val off = abs(((StruggleDetector.bearing(here, h.spot) - headingDeg + 540) % 360) - 180)
-            d in 30.0..rangeM && off <= 45
+            d in 30.0..rangeM && StruggleDetector.angleDiff(StruggleDetector.bearing(here, h.spot), headingDeg) <= 45 &&
+                StruggleDetector.angleDiff(h.headingDeg, headingDeg) <= 45
         }
         .sortedBy { it.second }

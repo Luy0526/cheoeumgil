@@ -12,47 +12,46 @@ class StruggleTest {
     @Test
     fun suddenBrakeNeedsARealSpeedDrop() {
         val d = StruggleDetector().apply { tripId = "t1" }
-        d.onLocation(north(0.0), 0)
-        d.onLocation(north(16.7), 1_000)            // ~60 km/h
+        d.onLocation(north(0.0), 0, 0.0)
+        d.onLocation(north(16.7), 1_000, 0.0)            // ~60 km/h
         d.onBrake(true, 1_100)
-        val e = d.onLocation(north(18.7), 2_000)    // 2 m in 1 s, ~7 km/h
+        val e = d.onLocation(north(18.7), 2_000, 0.0)    // 2 m in 1 s, ~7 km/h
         assertEquals(StruggleKind.SUDDEN_BRAKE, e?.kind)
 
         val gentle = StruggleDetector()
-        gentle.onLocation(north(0.0), 0)
-        gentle.onLocation(north(16.7), 1_000)
+        gentle.onLocation(north(0.0), 0, 0.0)
+        gentle.onLocation(north(16.7), 1_000, 0.0)
         gentle.onBrake(true, 1_100)
-        assertNull(gentle.onLocation(north(30.0), 2_000)) // still ~48 km/h
+        assertNull(gentle.onLocation(north(30.0), 2_000, 0.0)) // still ~48 km/h
     }
 
     @Test
-    fun signalFlippingIsHesitationButOneLaneChangeIsNot() {
+    fun aLongSignalWithoutTurningIsAFailedMerge() {
         val d = StruggleDetector()
-        d.onLocation(home, 0)
+        d.onLocation(home, 0, 0.0)
         assertNull(d.onTurnSignal(true, 1_000))
-        assertNull(d.onTurnSignal(false, 5_000))   // normal lane change
+        assertNull(d.onTurnSignal(false, 5_000))    // 4 s: a normal lane change
         assertNull(d.onTurnSignal(true, 9_000))
-        assertEquals(StruggleKind.SIGNAL_HESITATION, d.onTurnSignal(false, 12_000)?.kind)
-
-        val slow = StruggleDetector()
-        slow.onLocation(home, 0)
-        listOf(0L, 20_000, 40_000, 60_000).forEachIndexed { i, t -> assertNull(slow.onTurnSignal(i % 2 == 0, t)) }
+        assertNull(d.onTurnSignal(true, 12_000))    // repeated "on" report keeps the 9 s start
+        d.onLocation(north(40.0), 15_000, 5.0)      // crawling, same direction
+        assertEquals(StruggleKind.SIGNAL_HESITATION, d.onTurnSignal(false, 19_000)?.kind) // 10 s waiting for a gap
+        assertNull(d.onTurnSignal(false, 20_000))   // a second "off" is not another event
     }
 
     @Test
-    fun repeatedSignalStateIsNotAFlip() {
+    fun aLongSignalThatEndsInATurnIsAJunctionTurn() {
         val d = StruggleDetector()
-        d.onLocation(home, 0)
-        listOf(true, true, true, false, false).forEachIndexed { i, on ->
-            assertNull(d.onTurnSignal(on, 1_000L * i))  // one lane change reported 5 times = 2 real changes
-        }
+        d.onLocation(home, 0, 0.0)
+        assertNull(d.onTurnSignal(true, 1_000))     // waiting at a light to turn right
+        d.onLocation(north(10.0), 30_000, 90.0)     // turned
+        assertNull(d.onTurnSignal(false, 31_000))
     }
 
     @Test
     fun cruiseDropAndRerouteNeedAPosition() {
         val d = StruggleDetector()
         assertNull(d.onReRoute(0))                 // no location yet
-        d.onLocation(home, 0)
+        d.onLocation(home, 0, 0.0)
         assertEquals(StruggleKind.REROUTE, d.onReRoute(1)?.kind)
         assertNull(d.onCruise(false, 2))
         assertNull(d.onCruise(true, 3))
@@ -80,7 +79,18 @@ class StruggleTest {
         assertEquals(500.0, found.single().second, 1.0)
 
         val e = BriefingEngine()
-        assertEquals(listOf("500미터 앞은 다른 운전자들이 경로를 자주 벗어난 구간이에요. 놓치기 쉬운 곳이니, 갈 길을 미리 준비하세요."), e.onHotspots(found))
+        assertEquals(listOf("500미터 앞은 서로 다른 주행 3번에서 경로를 벗어난 구간이에요. 놓치기 쉬운 곳이니, 갈 길을 미리 준비하세요."), e.onHotspots(found))
         assertTrue(e.onHotspots(found).isEmpty())
+    }
+
+    @Test
+    fun theOtherCarriagewayIsKeptApart() {
+        // three trips struggled heading south at the same spot: not a hotspot for northbound, and not merged with it
+        val south = (1..3).map { StruggleEvent(StruggleKind.SUDDEN_BRAKE, north(500.0), 0, "s$it", 180.0) }
+        val northbound = (1..2).map { StruggleEvent(StruggleKind.SUDDEN_BRAKE, north(500.0), 0, "n$it", 0.0) }
+        val spots = hotspots(south + northbound)
+        assertEquals(listOf(180.0), spots.map { Math.round(it.headingDeg).toDouble() })
+        assertTrue(hotspotsAhead(home, 0.0, spots).isEmpty())
+        assertEquals(1, hotspotsAhead(north(1000.0), 180.0, spots).size)
     }
 }

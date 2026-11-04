@@ -2,11 +2,12 @@ package com.cheoeumgil.app
 
 import ai.pleos.playground.navi.constants.NaviErrorCode
 import ai.pleos.playground.navi.constants.NavigationStatus
-import ai.pleos.playground.navi.data.CautionPoint
 import ai.pleos.playground.navi.data.CurrentLocationInfo
 import ai.pleos.playground.navi.data.DestinationArrivedInfo
 import ai.pleos.playground.navi.data.DestinationInfo
 import ai.pleos.playground.navi.data.RouteStartInfo
+import ai.pleos.playground.navi.data.RouteStateInfo
+import ai.pleos.playground.navi.constants.TrafficCongestionType
 import ai.pleos.playground.navi.data.TBTInfo
 import ai.pleos.playground.navi.helper.NaviHelper
 import ai.pleos.playground.navi.helper.listener.NaviHelperEventListener
@@ -31,10 +32,10 @@ import ai.pleos.playground.vehicle.listener.GearSelectionListener
 import ai.pleos.playground.vehicle.listener.TurnSignalStateListener
 import android.app.Activity
 import com.cheoeumgil.core.BriefingEngine
-import com.cheoeumgil.core.Caution
 import com.cheoeumgil.core.Glyph
 import com.cheoeumgil.core.Icon
 import com.cheoeumgil.core.Hotspot
+import com.cheoeumgil.core.Jam
 import com.cheoeumgil.core.RouteHistory
 import com.cheoeumgil.core.SpeechQueue
 import com.cheoeumgil.core.Spot
@@ -65,7 +66,8 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * 처음길 prototype. ① briefs hard sections 1.5km ahead by voice from NaviHelper TBT and caution points.
+ * 처음길 prototype. ① briefs hard sections 1.5km ahead by voice from NaviHelper TBT, saying when traffic is backed up
+ * on the approach (route traffic). Caution points (accident-prone, school zone...) are left to the navi: they are its own data.
  * ② 헤맴 지도: vehicle/navi signals -> struggle events (saved locally) -> hotspots -> briefed when ahead.
  */
 class MainActivity : Activity() {
@@ -112,6 +114,8 @@ class MainActivity : Activity() {
     private var lastTurns = listOf<Turn>()
     private var lastHotspot: Pair<Hotspot, Double>? = null
     private var lastBriefing: String? = null
+    private var stateAskedAt = 0L
+    private var briefFrom = 0L // briefings wait for the route's traffic, which lands a moment after the first TBT
 
     private val sttResults = object : ResultListener {
         override fun onUpdated(text: String, isFinal: Boolean) {
@@ -195,8 +199,13 @@ class MainActivity : Activity() {
         override fun onTBTInfo(tbt: List<TBTInfo>) {
             ui.post { onTurns(tbt.map { Turn(it.type.name, it.distance, it.description) }) }
         }
-        override fun onCautionPointInfo(points: List<CautionPoint>) {
-            ui.post { engine.onCautions(points.map { Caution(it.id, it.type.name, it.remainDistance) }).forEach(::say) }
+        override fun onRouteStateInfo(info: RouteStateInfo) {
+            val jams = info.trafficStatus?.congestionItemList.orEmpty()
+                // the navi calls 65 km/h on a motorway "slow" too; only a crawl makes merging hard
+                .filter { (it.trafficCongestionType == TrafficCongestionType.SLOW || it.trafficCongestionType == TrafficCongestionType.HEAVY) && it.avrSpeed < JAM_KMH }
+                .map { Jam(it.offset, it.distance, it.avrSpeed) }
+            log("TRAFFIC", jams.joinToString { "${it.offsetM.toInt()}m+${it.lengthM.toInt()}m ${it.kmh.toInt()}km/h" }.ifEmpty { "no jams" })
+            ui.post { engine.jams = jams }
         }
         override fun onCurrentRoadSpeedLimit(limit: Int) {
             if (limit != lastSpeedLimit) log("SPEED_LIMIT", "$limit").also { lastSpeedLimit = limit }
@@ -382,13 +391,17 @@ class MainActivity : Activity() {
     private fun onTurns(turns: List<Turn>) {
         if (turns.isEmpty()) return clearRoute()
         lastTurns = turns
+        // route length = the first full TBT list (RouteStartInfo.distance is rounded, ~300 m off on a 14 km route)
+        if (engine.routeM == 0.0 && destination.isNotEmpty()) engine.routeM = turns.sumOf { it.gapM }
+        // traffic changes as we drive; NaviHelper only sends it when asked (and at route start)
+        if (now() - stateAskedAt > 60_000) { stateAskedAt = now(); runCatching { navi.getRouteStateInfo() } }
         shown = engine.nextHard(turns)?.let { s ->
-            val tip = BriefingEngine.action((s.next ?: s.turn).type).second
-            Shown("${BriefingEngine.distance(s.aheadM)} 앞", s.title, tip, iconFor(s))
+            Shown("${BriefingEngine.distance(s.aheadM)} 앞", s.title, s.tip, iconFor(s))
         } ?: Shown("", "1.5킬로미터 안에 어려운 구간이 없어요", "편하게 내비를 따라가세요.")
         upcoming = engine.hardSections(turns, 5_000.0).drop(1)
             .map { "${BriefingEngine.distance(it.aheadM)} · ${it.title}" }
         render()
+        if (now() < briefFrom) return
         engine.summary(turns)?.let(::say)
         engine.onTurns(turns).forEach(::say)
     }
@@ -398,6 +411,9 @@ class MainActivity : Activity() {
         destination = name
         detector.tripId = "trip-${now()}"
         engine = BriefingEngine().apply { quiet = history.isFamiliar(name) }
+        stateAskedAt = 0L
+        briefFrom = now() + TRAFFIC_WAIT_MS
+        ui.postDelayed({ if (lastTurns.isNotEmpty()) onTurns(lastTurns) }, TRAFFIC_WAIT_MS)
         lastHere?.let { remember(it); fetchHotspots(it) } ?: run { startPending = true }
         log("NAVI", "destination=$name familiar=${engine.quiet}")
         render()
@@ -518,7 +534,7 @@ class MainActivity : Activity() {
             remember(here)
             fetchHotspots(here)
         }
-        record(detector.onLocation(here, now()))
+        record(detector.onLocation(here, now(), headingDeg))
         val s = detector.speedKmh < STOPPED_KMH
         if (s != stopped) { stopped = s; render() }
         checkHotspots()
@@ -531,22 +547,19 @@ class MainActivity : Activity() {
         engine.onHotspots(ahead).forEach(::say)
     }
 
-    /** Appends one event to the local store as `kind,lat,lon,timeMs,tripId` and refreshes the hotspots. */
+    /** Appends one event to the local store (same line format as [Wire]) and refreshes the hotspots. */
     private fun record(e: StruggleEvent?) {
         e ?: return
         events += e
         localHotspots = hotspots(events)
-        runCatching { eventsFile.appendText("${e.kind},${e.spot.lat},${e.spot.lon},${e.timeMs},${e.tripId}\n") }
+        runCatching { eventsFile.appendText(Wire.encodeEvents(listOf(e)) + "\n") }
         log("STRUGGLE", "${e.kind} at ${e.spot} (hotspots=${hotspotList.size})")
     }
 
     private fun loadEvents() {
         runCatching {
             if (!eventsFile.exists()) return@runCatching
-            eventsFile.readLines().mapNotNullTo(events) { line ->
-                val f = line.split(",")
-                runCatching { StruggleEvent(StruggleKind.valueOf(f[0]), Spot(f[1].toDouble(), f[2].toDouble()), f[3].toLong(), f[4]) }.getOrNull()
-            }
+            events += Wire.decodeEvents(eventsFile.readText()) // lines from older versions (no heading) are skipped
             localHotspots = hotspots(events)
         }
         log("STRUGGLE", "loaded ${events.size} events, ${hotspotList.size} hotspots")
@@ -568,6 +581,7 @@ class MainActivity : Activity() {
     private fun startDemo() {
         ui.removeCallbacksAndMessages(null)
         engine = BriefingEngine()
+        destination = "" // not a navi route: no route length, so live traffic never applies to it
         var route = listOf(
             Turn("TURN_LEFT", 80.0, "기업지원허브 방면"),
             Turn("TURN_RIGHT", 380.0, "판교IC 방면"),
@@ -641,5 +655,7 @@ class MainActivity : Activity() {
 private data class Shown(val distance: String, val title: String, val tip: String, val icon: Icon? = null)
 
 private const val STOPPED_KMH = 5.0
+private const val JAM_KMH = 30.0
+private const val TRAFFIC_WAIT_MS = 2_000L
 
 private val IDLE = Shown("", "경로를 설정하면", "어려운 구간을 1.5킬로미터 전에 미리 알려드릴게요.")

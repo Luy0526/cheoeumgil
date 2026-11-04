@@ -21,7 +21,7 @@ class VoiceQueryTest {
 
     @Test
     fun answersFromCurrentRouteState() {
-        assertEquals("1.2킬로미터 앞 지하차도 옆길이에요. 입구와 옆길이 붙어 있어 직전엔 옮기기 어려우니, 지금부터 오른쪽 옆길로 갈 준비를 하세요.",
+        assertEquals("1.2킬로미터 앞 판교IC 방면 지하차도 옆길이에요. 입구와 옆길이 붙어 있어 직전엔 옮기기 어려우니, 지금부터 오른쪽 옆길로 갈 준비를 하세요.",
             VoiceQuery.answer(Ask.NEXT, underpass, 3, null, null).text)
         assertEquals("입구와 옆길이 바로 붙어 있어서, 차로를 늦게 고르면 원하지 않는 길로 들어가기 쉬워요.",
             VoiceQuery.answer(Ask.WHY, underpass, 3, null, null).text)
@@ -35,7 +35,7 @@ class VoiceQueryTest {
     @Test
     fun hotspotWhenNoTurnSectionAndQuietSwitches() {
         val h = Hotspot(Spot(37.0, 127.0), 4, StruggleKind.SUDDEN_BRAKE) to 600.0
-        assertEquals("600미터 앞에 다른 운전자들이 급하게 브레이크를 밟은 구간이 있어요.", VoiceQuery.answer(Ask.NEXT, null, 0, h, null).text)
+        assertEquals("600미터 앞에 서로 다른 주행 4번에서 급하게 브레이크를 밟은 구간이 있어요.", VoiceQuery.answer(Ask.NEXT, null, 0, h, null).text)
         assertEquals("그곳은 서로 다른 주행 4번에서 급하게 브레이크를 밟았어요. 속도를 미리 줄이세요.", VoiceQuery.answer(Ask.WHY, null, 0, h, null).text)
         assertEquals(true, VoiceQuery.answer(Ask.QUIET, null, 0, null, null).setQuiet)
         assertEquals(false, VoiceQuery.answer(Ask.DETAIL, null, 0, null, null).setQuiet)

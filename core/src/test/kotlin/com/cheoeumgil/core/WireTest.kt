@@ -7,12 +7,12 @@ import org.junit.Test
 class WireTest {
     private val home = Spot(37.4127, 127.0947)
     private fun north(m: Double) = home.copy(lat = home.lat + m / 111_320.0)
-    private val e = StruggleEvent(StruggleKind.REROUTE, north(1000.0), 1_761_000_000_000, "trip-1")
+    private val e = StruggleEvent(StruggleKind.REROUTE, north(1000.0), 1_761_000_000_000, "trip-1", 92.5)
 
     @Test
     fun eventsAndHotspotsRoundTrip() {
         assertEquals(listOf(e), Wire.decodeEvents(Wire.encodeEvents(listOf(e))))
-        val h = Hotspot(north(500.0), 4, StruggleKind.SUDDEN_BRAKE)
+        val h = Hotspot(north(500.0), 4, StruggleKind.SUDDEN_BRAKE, 270.0)
         assertEquals(listOf(h), Wire.decodeHotspots(Wire.encodeHotspots(listOf(h))))
     }
 
@@ -20,7 +20,9 @@ class WireTest {
     fun malformedOrHostileLinesAreDropped() {
         val body = listOf(
             Wire.encodeEvents(listOf(e)),
-            "REROUTE,91.0,127.0,1,trip-2",          // lat out of range
+            "REROUTE,91.0,127.0,1,trip-2,0.0",      // lat out of range
+            "REROUTE,37.0,127.0,1,trip-2,400.0",    // heading out of range
+            "REROUTE,37.0,127.0,1,trip-2",          // older line without heading
             "HACK,37.0,127.0,1,trip-2",             // unknown kind
             "REROUTE,37.0,127.0,1,trip 2;rm",       // bad trip id
             "REROUTE,37.0,127.0,-5,trip-2",         // bad time

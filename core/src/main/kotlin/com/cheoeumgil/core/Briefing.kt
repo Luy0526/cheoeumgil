@@ -5,12 +5,28 @@ import kotlin.math.roundToInt
 /** One upcoming maneuver from NaviHelper TBT. [gapM] = distance from the previous item (first item: from the car). */
 data class Turn(val type: String, val gapM: Double, val description: String)
 
-/** One caution point from NaviHelper. */
-data class Caution(val id: String, val type: String, val remainM: Int)
+/** A congested stretch from NaviHelper route traffic: [offsetM] from the route start, [kmh] average speed. */
+data class Jam(val offsetM: Double, val lengthM: Double, val kmh: Double)
 
-/** A hard section [aheadM] metres away; [next] is set when another maneuver follows right after. */
-data class Section(val turn: Turn, val aheadM: Double, val next: Turn?) {
+/**
+ * A hard section [aheadM] metres away; [next] is set when another maneuver follows right after,
+ * [jam] when traffic is backed up on the approach (merging gets harder there).
+ */
+data class Section(val turn: Turn, val aheadM: Double, val next: Turn?, val jam: Jam? = null) {
     val title get() = BriefingEngine.action(turn.type).first + (next?.let { " 후 바로 ${BriefingEngine.action(it.type).first}" } ?: "")
+
+    /** Why to get ready now. A jam replaces the usual reason; tips without a "지금부터" part just get it in front. */
+    val tip: String get() {
+        next?.let {
+            val combo = "바로 ${BriefingEngine.distance(it.gapM)} 뒤에 ${BriefingEngine.subject(BriefingEngine.action(it.type).first)} 이어"
+            return if (jam == null) "${combo}져 그 사이엔 옮기기 어려우니, 지금부터 준비하세요."
+            else "${combo}지고, 그 앞이 막혀 있어 끼어들기 더 어려우니, 지금부터 준비하세요."
+        }
+        val base = BriefingEngine.action(turn.type).second
+        if (jam == null) return base
+        val prepare = base.substringAfter(", 지금부터 ", "")
+        return if (prepare.isEmpty()) "그 앞이 막혀 있어요. $base" else "그 앞이 막혀 있어 직전엔 끼어들기 더 어려우니, 지금부터 $prepare"
+    }
 }
 
 /**
@@ -21,13 +37,17 @@ class BriefingEngine(
     private val earlyM: Int = 1500,   // first briefing distance
     private val nearM: Int = 400,     // reminder distance
     private val comboGapM: Int = 300, // a following maneuver this close makes a "combo"
-    private val cautionM: Int = 1000,
+    private val jamApproachM: Int = 300, // traffic this close before a section makes it harder
 ) {
     private val spoken = mutableSetOf<String>()
     private var summarized = false
 
     /** Familiar route: only the near reminder for genuinely hard sections (no early briefings, no plain combos). */
     var quiet = false
+
+    /** Route length (from route start) and its congested stretches, for [Section.jam]; 0 = unknown, jams ignored. */
+    var routeM = 0.0
+    var jams = listOf<Jam>()
 
     /**
      * Returns the phrase to speak now (at most one per update, nearest first, so the driver
@@ -38,7 +58,7 @@ class BriefingEngine(
         for ((i, t) in turns.withIndex()) {
             ahead += t.gapM
             if (ahead > earlyM) break
-            val next = turns.getOrNull(i + 1)?.takeIf { it.gapM <= comboGapM && it.type != "TURN_ARRIVE" }
+            val next = comboNext(turns, i)
             if (!isHard(t.type) && next == null) continue
             val near = ahead <= nearM
             if (quiet && (!near || !isHard(t.type))) continue
@@ -50,7 +70,7 @@ class BriefingEngine(
                 spoken.add("${key(turns, i + 1)}|$stage")
                 if (near) spoken.add("${key(turns, i + 1)}|early")
             }
-            return listOf(phrase(t, ahead, next, near))
+            return listOf(phrase(Section(t, ahead, next, jamAt(turns, ahead)), near))
         }
         return emptyList()
     }
@@ -66,14 +86,29 @@ class BriefingEngine(
     // TBT drops passed items from the front, so position-from-the-end is a stable id
     private fun key(turns: List<Turn>, i: Int) = "${turns.size - i}|${turns[i].type}|${turns[i].description}"
 
-    fun onCautions(points: List<Caution>): List<String> =
-        points.filter { it.remainM <= cautionM && it.type in CAUTION_NAMES && spoken.add("caution|${it.id}") }
-            .map { "${distance(it.remainM.toDouble())} 앞 ${copula(CAUTION_NAMES.getValue(it.type))}. ${cautionTip(it.type)}" }
+    /**
+     * Two maneuvers this close make a combo, but only when one of them is a hard one: the navi already
+     * announces plain back-to-back turns itself.
+     */
+    private fun comboNext(turns: List<Turn>, i: Int) = turns.getOrNull(i + 1)
+        ?.takeIf { it.gapM <= comboGapM && it.type != "TURN_ARRIVE" && (isHard(turns[i].type) || isHard(it.type)) }
+
+    /**
+     * The jam on the approach to a section [aheadM] away. TBT lists the whole remaining route, so its sum is
+     * the distance left and route length minus that is how far we have come.
+     * ponytail: assumes jam offsets count from the route start (matches the emulator at the start, where the car
+     * never moves); recheck on a real drive.
+     */
+    private fun jamAt(turns: List<Turn>, aheadM: Double): Jam? {
+        if (routeM <= 0) return null
+        val travelled = routeM - turns.sumOf { it.gapM }
+        return jams.firstOrNull { j -> val start = j.offsetM - travelled; start <= aheadM && start + j.lengthM >= aheadM - jamApproachM }
+    }
 
     /** 헤맴 지도 hotspots ahead (nearest first, from [hotspotsAhead]); one briefing per update, once per hotspot. */
     fun onHotspots(ahead: List<Pair<Hotspot, Double>>): List<String> =
         ahead.firstOrNull { (h, d) -> d <= earlyM && spoken.add("hotspot|${h.spot}") }
-            ?.let { (h, d) -> listOf("${distance(d)} 앞은 다른 운전자들이 ${h.main.reason} 구간이에요. ${h.main.tip}") }
+            ?.let { (h, d) -> listOf("${distance(d)} 앞은 서로 다른 주행 ${h.trips}번에서 ${h.main.reason} 구간이에요. ${h.main.tip}") }
             ?: emptyList()
 
     /** Hard sections (with distance ahead) within [rangeM], nearest first. */
@@ -85,9 +120,9 @@ class BriefingEngine(
             ahead += t.gapM
             if (ahead > rangeM) break
             if (i == covered) continue
-            val next = turns.getOrNull(i + 1)?.takeIf { it.gapM <= comboGapM && it.type != "TURN_ARRIVE" }
+            val next = comboNext(turns, i)
             if (isHard(t.type) || next != null) {
-                out += Section(t, ahead, next)
+                out += Section(t, ahead, next, jamAt(turns, ahead))
                 if (next != null) covered = i + 1
             }
         }
@@ -128,8 +163,9 @@ class BriefingEngine(
         fun action(type: String): Pair<String, String> {
             val s = side(type)
             return when {
-                type == "TURN_LEFT" -> "좌회전" to "미리 좌회전할 준비를 하세요."
-                type == "TURN_RIGHT" -> "우회전" to "미리 우회전할 준비를 하세요."
+                // plain turns are never briefed alone, only named as half of a combo (whose tip is used)
+                type == "TURN_LEFT" -> "좌회전" to ""
+                type == "TURN_RIGHT" -> "우회전" to ""
                 type.startsWith("TURN_KEEP") -> "갈림길 ${s} 길" to "갈림길 직전엔 옮기기 어려우니, 지금부터 ${s} 길로 갈 준비를 하세요."
                 type.startsWith("TURN_SHARP") -> "급하게 꺾이는 ${s} 길" to "속도를 충분히 줄이세요."
                 type == "TURN_UTURN" -> "유턴" to "유턴할 수 있는 곳과 신호를 미리 확인하세요."
@@ -149,34 +185,11 @@ class BriefingEngine(
             }
         }
 
-        fun phrase(t: Turn, aheadM: Double, next: Turn?, near: Boolean): String {
-            val (what, tip) = action(t.type)
-            val where = t.description.takeIf { it.isNotBlank() && it != "이름 없는 도로" }?.let { "$it " } ?: ""
-            val head = if (near) "곧 $where$what" else "${distance(aheadM)} 앞 $where$what"
-            val combo = next?.let { " 바로 ${distance(it.gapM)} 뒤에 ${subject(action(it.type).first)} 이어지니, ${action(it.type).second}" } ?: " $tip"
-            return "${copula(head)}.$combo"
-        }
-
-        val CAUTION_NAMES = mapOf(
-            "ACCIDENT_PRONE_AREA" to "사고가 잦은 구간",
-            "NARROW_ROAD" to "길이 좁아지는 구간",
-            "HIGHWAY_CONSTRUCTION" to "공사 구간",
-            "SCHOOL_ZONE" to "어린이 보호구역",
-            "SLIPPERY_ROAD_ALERT" to "미끄러운 길",
-            "DOWNHILL_CAUTION_AREA" to "급경사 내리막",
-            "FALLING_ROCK_AREA" to "낙석 주의 구간",
-            "FOG_AREA" to "안개가 잦은 구간",
-            "RAILROAD_CROSSING" to "철길 건널목",
-            "WILDLIFE_CROSSING" to "야생동물 출몰 구간",
-            "ROAD_DAMAGE_ALERT" to "도로 파손 구간",
-            "WRONG_WAY_DRIVING_ALERT" to "역주행 차량 경고 구간",
-        )
-
-        private fun cautionTip(type: String) = when (type) {
-            "SCHOOL_ZONE" -> "시속 30킬로미터 이하로 천천히 가세요."
-            "RAILROAD_CROSSING" -> "건너기 전에 일단 멈추고 좌우를 확인하세요."
-            "WRONG_WAY_DRIVING_ALERT" -> "앞 차와 거리를 넉넉히 두세요."
-            else -> "미리 속도를 줄이세요."
+        fun phrase(s: Section, near: Boolean): String {
+            val what = action(s.turn.type).first
+            val where = s.turn.description.takeIf { it.isNotBlank() && it != "이름 없는 도로" }?.let { "$it " } ?: ""
+            val head = if (near) "곧 $where$what" else "${distance(s.aheadM)} 앞 $where$what"
+            return "${copula(head)}. ${s.tip}"
         }
     }
 }
