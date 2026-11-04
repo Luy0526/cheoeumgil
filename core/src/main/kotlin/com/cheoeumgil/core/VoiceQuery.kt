@@ -48,7 +48,7 @@ object VoiceQuery {
     private fun reasonSentence(kind: StruggleKind) = when (kind) {
         StruggleKind.REROUTE -> "경로를 벗어났어요."
         StruggleKind.SUDDEN_BRAKE -> "급하게 브레이크를 밟았어요."
-        StruggleKind.SIGNAL_HESITATION -> "깜빡이를 켜고 한참 못 끼어들었어요."
+        StruggleKind.SIGNAL_HESITATION -> "깜빡이를 켜고도 제때 못 끼어들었어요."
         StruggleKind.CRUISE_DROP -> "크루즈가 꺼졌어요."
     } + " " + kind.tip
 

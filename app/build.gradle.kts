@@ -13,8 +13,8 @@ android {
         applicationId = "com.cheoeumgil.app"
         minSdk = 28 // Pleos requires API 28+ (signing key rotation)
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.4"
+        versionCode = 7
+        versionName = "0.4.1"
     }
     buildFeatures { buildConfig = true }
     // Key and passwords live outside the repo (~/keys); without that file the release APK is left unsigned.

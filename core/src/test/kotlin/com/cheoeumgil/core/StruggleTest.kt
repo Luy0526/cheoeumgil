@@ -26,16 +26,37 @@ class StruggleTest {
     }
 
     @Test
-    fun aLongSignalWithoutTurningIsAFailedMerge() {
+    fun waitingWithTheSignalOnWhileBarelyMovingIsAFailedMerge() {
         val d = StruggleDetector()
         d.onLocation(home, 0, 0.0)
         assertNull(d.onTurnSignal(true, 1_000))
-        assertNull(d.onTurnSignal(false, 5_000))    // 4 s: a normal lane change
+        assertNull(d.onTurnSignal(true, 4_000))     // repeated "on" report keeps the 1 s start
+        d.onLocation(north(40.0), 10_000, 5.0)      // crawling in traffic, same direction
+        assertEquals(StruggleKind.SIGNAL_HESITATION, d.onTurnSignal(false, 11_000)?.kind) // 10 s, 40 m
+        assertNull(d.onTurnSignal(false, 12_000))   // a second "off" is not another event
+    }
+
+    @Test
+    fun aMotorwayLaneChangeTakesAsLongButIsNotOne() {
+        val d = StruggleDetector()
+        d.onLocation(home, 0, 0.0)
+        assertNull(d.onTurnSignal(true, 1_000))
+        d.onLocation(north(190.0), 8_000, 0.0)      // 7 s at ~100 km/h
+        assertNull(d.onTurnSignal(false, 8_000))
+        d.onLocation(north(2_000.0), 68_000, 0.0)   // next lane change a minute later: not a retry
+        assertNull(d.onTurnSignal(true, 68_000))
+        d.onLocation(north(2_080.0), 71_000, 0.0)
+        assertNull(d.onTurnSignal(false, 71_000))
+    }
+
+    @Test
+    fun signallingAgainSoonAfterGivingUpIsARetry() {
+        val d = StruggleDetector()
+        d.onLocation(home, 0, 0.0)
+        assertNull(d.onTurnSignal(true, 1_000))
+        assertNull(d.onTurnSignal(false, 4_000))    // 3 s, gave up
         assertNull(d.onTurnSignal(true, 9_000))
-        assertNull(d.onTurnSignal(true, 12_000))    // repeated "on" report keeps the 9 s start
-        d.onLocation(north(40.0), 15_000, 5.0)      // crawling, same direction
-        assertEquals(StruggleKind.SIGNAL_HESITATION, d.onTurnSignal(false, 19_000)?.kind) // 10 s waiting for a gap
-        assertNull(d.onTurnSignal(false, 20_000))   // a second "off" is not another event
+        assertEquals(StruggleKind.SIGNAL_HESITATION, d.onTurnSignal(false, 12_000)?.kind)
     }
 
     @Test
