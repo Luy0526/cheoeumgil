@@ -47,6 +47,7 @@
 ## 테스트 환경
 
 - Pleos Connect Emulator 2.1.0, Android 14 (API 34), Apple Silicon Mac
+- 화면 규격: 2560×1440 가로, 160dpi. 앱은 내비 옆 분할 화면의 세로 창에서 실행
 - Gradle 9.1.0, AGP 8.13.0, Kotlin 2.2.20, JDK 25 (Android Studio 내장 JBR)
 - SDK: Vehicle 2.3.2, NaviHelper 3.0.5, TextToSpeech 3.3.1, SpeechToText 3.3.1
 - 단위 테스트: `./gradlew :core:test :server:test` 32건: 브리핑 8(차로 지정·방향 반복 금지, 구간 앞 정체 포함), 헤맴 지도 9, 익숙한 길 2, 음성 질의 3, 음성 출력 순서 2, 서버 통신 형식 4, 아이콘 1, 서버 저장소 3
